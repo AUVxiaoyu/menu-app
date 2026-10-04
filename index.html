@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>菜品管理</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f5f5f5;
+    color: #333;
+    padding-bottom: 80px;
+  }
+  header {
+    position: sticky; top: 0; z-index: 10;
+    background: #ff6b35; color: #fff;
+    padding: 14px 16px;
+    display: flex; align-items: center; gap: 10px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.15);
+  }
+  header h1 { font-size: 18px; flex-shrink: 0; }
+  #searchInput {
+    flex: 1; border: none; border-radius: 20px;
+    padding: 8px 14px; font-size: 14px; outline: none;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+    padding: 14px;
+    max-width: 1000px; margin: 0 auto;
+  }
+  .card {
+    background: #fff; border-radius: 12px; overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    display: flex; flex-direction: column;
+  }
+  .card img {
+    width: 100%; height: 130px; object-fit: cover; background: #eee;
+  }
+  .card-body { padding: 10px 12px; flex: 1; }
+  .card-body h3 { font-size: 15px; margin-bottom: 6px; }
+  .price { color: #ff6b35; font-weight: bold; font-size: 16px; }
+  .cost { color: #999; font-size: 12px; margin-left: 8px; }
+  .card-actions {
+    display: flex; border-top: 1px solid #f0f0f0;
+  }
+  .card-actions button {
+    flex: 1; border: none; background: none;
+    padding: 9px 0; font-size: 13px; cursor: pointer; color: #555;
+  }
+  .card-actions button:first-child { border-right: 1px solid #f0f0f0; }
+  .card-actions .del { color: #e53935; }
+  #addBtn {
+    position: fixed; right: 18px; bottom: 22px; z-index: 20;
+    width: 56px; height: 56px; border-radius: 50%;
+    background: #ff6b35; color: #fff; border: none;
+    font-size: 28px; line-height: 1; cursor: pointer;
+    box-shadow: 0 4px 12px rgba(255,107,53,.45);
+  }
+  /* 弹窗 */
+  .modal-mask {
+    position: fixed; inset: 0; background: rgba(0,0,0,.45);
+    display: none; align-items: flex-end; justify-content: center; z-index: 30;
+  }
+  .modal-mask.show { display: flex; }
+  .modal {
+    background: #fff; width: 100%; max-width: 480px;
+    border-radius: 16px 16px 0 0; padding: 20px;
+    max-height: 90vh; overflow-y: auto;
+  }
+  .modal h2 { font-size: 17px; margin-bottom: 14px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 13px; color: #666; margin-bottom: 4px; }
+  .field input {
+    width: 100%; border: 1px solid #ddd; border-radius: 8px;
+    padding: 10px; font-size: 15px; outline: none;
+  }
+  .field input:focus { border-color: #ff6b35; }
+  #previewImg {
+    width: 100%; height: 160px; object-fit: cover;
+    border-radius: 8px; background: #f0f0f0; display: none; margin-top: 8px;
+  }
+  .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+  .modal-actions button {
+    flex: 1; padding: 12px; border-radius: 10px; border: none;
+    font-size: 15px; cursor: pointer;
+  }
+  .btn-cancel { background: #f0f0f0; color: #555; }
+  .btn-save { background: #ff6b35; color: #fff; }
+  .btn-save:disabled { opacity: .6; }
+  #emptyTip {
+    text-align: center; color: #999; padding: 60px 20px; font-size: 14px;
+  }
+  #toast {
+    position: fixed; left: 50%; bottom: 100px; transform: translateX(-50%);
+    background: rgba(0,0,0,.75); color: #fff; padding: 10px 20px;
+    border-radius: 20px; font-size: 14px; display: none; z-index: 50;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🍜 菜品管理</h1>
+  <input id="searchInput" type="search" placeholder="搜索菜名...">
+</header>
+
+<div class="grid" id="dishGrid"></div>
+<div id="emptyTip">暂无菜品，点右下角 + 添加</div>
+
+<button id="addBtn">+</button>
+
+<div class="modal-mask" id="modalMask">
+  <div class="modal">
+    <h2 id="modalTitle">添加菜品</h2>
+    <div class="field">
+      <label>菜品照片</label>
+      <input type="file" id="imgInput" accept="image/*">
+      <img id="previewImg" alt="">
+    </div>
+    <div class="field">
+      <label>菜名 *</label>
+      <input type="text" id="nameInput" placeholder="例如：宫保鸡丁">
+    </div>
+    <div class="field">
+      <label>售价（元）*</label>
+      <input type="number" id="priceInput" step="0.01" min="0" placeholder="0.00">
+    </div>
+    <div class="field">
+      <label>成本（元）</label>
+      <input type="number" id="costInput" step="0.01" min="0" placeholder="0.00">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="cancelBtn">取消</button>
+      <button class="btn-save" id="saveBtn">保存</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+/* ============ 配置区（之后要改成你自己的） ============ */
+const SUPABASE_URL = "https://zhadplzdspxfyrlmwvcj.supabase.co";
+const SUPABASE_KEY = "sb_publishable_F-rONSshCmpYtQWfmdierQ_lI9Ebazg";
+/* ===================================================== */
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const BUCKET = "dish-images";
+
+let dishes = [];       // 全部菜品
+let editingId = null;  // 正在编辑的菜品 id，null 表示新增
+let editingImageUrl = null;
+
+const $ = id => document.getElementById(id);
+
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.style.display = "block";
+  setTimeout(() => t.style.display = "none", 2000);
+}
+
+/* ---------- 加载列表 ---------- */
+async function loadDishes() {
+  const { data, error } = await sb.from("dishes").select("*").order("created_at", { ascending: false });
+  if (error) { toast("加载失败：" + error.message); return; }
+  dishes = data || [];
+  render(dishes);
+}
+
+/* ---------- 渲染 ---------- */
+function render(list) {
+  const grid = $("dishGrid");
+  $("emptyTip").style.display = list.length ? "none" : "block";
+  grid.innerHTML = list.map(d => `
+    <div class="card">
+      <img src="${d.image_url || ""}" alt="" onerror="this.style.visibility='hidden'">
+      <div class="card-body">
+        <h3>${escapeHtml(d.name)}</h3>
+        <span class="price">¥${Number(d.price).toFixed(2)}</span>
+        ${d.cost != null ? `<span class="cost">成本 ¥${Number(d.cost).toFixed(2)}</span>` : ""}
+      </div>
+      <div class="card-actions">
+        <button onclick="openEdit('${d.id}')">编辑</button>
+        <button class="del" onclick="removeDish('${d.id}')">删除</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[c]));
+}
+
+/* ---------- 搜索 ---------- */
+$("searchInput").addEventListener("input", e => {
+  const kw = e.target.value.trim();
+  render(kw ? dishes.filter(d => d.name.includes(kw)) : dishes);
+});
+
+/* ---------- 弹窗 ---------- */
+function openModal(dish) {
+  editingId = dish ? dish.id : null;
+  editingImageUrl = dish ? dish.image_url : null;
+  $("modalTitle").textContent = dish ? "编辑菜品" : "添加菜品";
+  $("nameInput").value = dish ? dish.name : "";
+  $("priceInput").value = dish ? dish.price : "";
+  $("costInput").value = dish && dish.cost != null ? dish.cost : "";
+  $("imgInput").value = "";
+  const pv = $("previewImg");
+  if (dish && dish.image_url) { pv.src = dish.image_url; pv.style.display = "block"; }
+  else { pv.style.display = "none"; }
+  $("modalMask").classList.add("show");
+}
+function closeModal() { $("modalMask").classList.remove("show"); }
+
+$("addBtn").onclick = () => openModal(null);
+$("cancelBtn").onclick = closeModal;
+
+window.openEdit = id => openModal(dishes.find(d => d.id === id));
+
+$("imgInput").addEventListener("change", e => {
+  const f = e.target.files[0];
+  if (f) {
+    $("previewImg").src = URL.createObjectURL(f);
+    $("previewImg").style.display = "block";
+  }
+});
+
+/* ---------- 上传图片 ---------- */
+async function uploadImage(file) {
+  const ext = file.name.split(".").pop() || "jpg";
+  const path = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+  const { error } = await sb.storage.from(BUCKET).upload(path, file);
+  if (error) throw error;
+  const { data } = sb.storage.from(BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}
+
+/* ---------- 保存（新增/编辑） ---------- */
+$("saveBtn").onclick = async () => {
+  const name = $("nameInput").value.trim();
+  const price = parseFloat($("priceInput").value);
+  const cost = $("costInput").value === "" ? null : parseFloat($("costInput").value);
+  if (!name) { toast("请填写菜名"); return; }
+  if (isNaN(price)) { toast("请填写售价"); return; }
+
+  const btn = $("saveBtn");
+  btn.disabled = true; btn.textContent = "保存中...";
+  try {
+    let image_url = editingImageUrl;
+    const file = $("imgInput").files[0];
+    if (file) image_url = await uploadImage(file);
+
+    const row = { name, price, cost, image_url };
+    let error;
+    if (editingId) {
+      ({ error } = await sb.from("dishes").update(row).eq("id", editingId));
+    } else {
+      ({ error } = await sb.from("dishes").insert(row));
+    }
+    if (error) throw error;
+    closeModal();
+    toast("已保存");
+    loadDishes();
+  } catch (e) {
+    toast("保存失败：" + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = "保存";
+  }
+};
+
+/* ---------- 删除 ---------- */
+window.removeDish = async id => {
+  if (!confirm("确定删除这道菜吗？")) return;
+  const { error } = await sb.from("dishes").delete().eq("id", id);
+  if (error) { toast("删除失败：" + error.message); return; }
+  toast("已删除");
+  loadDishes();
+};
+
+loadDishes();
+</script>
+</body>
+</html>
